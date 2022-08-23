@@ -1,0 +1,188 @@
+---
+title: "Phenotypic analysis of the CO2 N Fe combinatorial experiment"
+author: "Océane Cassan"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  fig.height = 10,
+  fig.width = 12,
+  message = FALSE,
+  warning = FALSE
+)
+library(tidyverse, quietly = T)
+library(ggpubr)
+```
+
+This document plots and analyses the phenotypic observations on Arabidopsis thaliana under the CO2 * N * Fe combinatorial design.
+
+
+
+
+# Biomass
+
+
+
+```{r}
+
+data <- read.csv("../Data/Biomass.csv", h = T, sep = ',', na.strings = "")
+data <- data[data$ShootBiomass.g > 0,]
+data <- na.omit(data)
+data$N <- ifelse(data$N == "10 mM", "High nitrate", "Low nitrate")
+data$Fe <- ifelse(data$Fe == "+Fe", "Iron supply", "Iron starvation")
+data$N <- relevel(factor(data$N), ref = "High nitrate")
+data$Fe <- relevel(factor(data$Fe), ref = "Iron supply")
+ggplot(data, aes(x = CO2, 
+                 y = ShootBiomass.g)) + 
+  geom_boxplot(alpha = 0.3, color = "black", size = 0.2, width = 0.5,
+               aes(fill = interaction(CO2, N, Fe))) + 
+  theme(title = element_text(size = 15, face = "bold"))  +
+  theme_pubr(legend = "none")+
+  scale_fill_brewer(name = "Condition", palette = "Paired") +
+  scale_color_brewer(name = "Condition", palette = "Paired") +
+  geom_dotplot(binaxis='y', stackdir='center', dotsize=1.3, 
+               aes(fill = interaction(CO2, N, Fe),
+                                         color = interaction(CO2, N, Fe))) +
+  labs(title = "Biomass") + xlab(expression(CO[2]~" condition")) +
+  ggh4x::facet_nested_wrap(vars(N, Fe), nest_line = T) +
+  stat_compare_means(comparisons = list(c("ACO2", "ECO2")), 
+                     vjust = 2, label = "p.signif") +
+  ylab("Biomass (g/plant)") + 
+  theme(strip.background = element_blank(),
+        strip.text = element_text(size = 12))+ 
+  scale_x_discrete(labels=c("ACO2" = expression(ACO[2]),
+                            "ECO2" = expression(ECO[2])))
+
+
+lm <- lm(data = data, ShootBiomass.g~CO2 * N * Fe)
+summary(lm)
+```
+
+# N content
+
+
+```{r}
+data <- read.csv("../Data/N_content.csv", h = T, sep = ';', na.strings = "NA")
+colnames(data)[1:3] <- c("CO2", "Nitrate", "Iron")
+data$Nitrate <- data$Nitrate |> 
+  str_replace("0,5 mM", "Low nitrate") |> 
+  str_replace("10 mM", "High nitrate") |> 
+  as.factor() |>
+  relevel(ref = "High nitrate")
+
+data$Iron <- data$Iron |>
+  str_replace("\\-Fe", "Iron starvation") |> 
+  str_replace("\\+Fe", "Iron supply") |> 
+  as.factor() |> 
+  relevel(ref = "Iron supply")
+data <- na.omit(data)
+
+ggplot(data, aes(x = CO2, 
+                     y = N.)) + 
+  geom_boxplot(alpha = 0.3, color = "black", size = 0.2, width = 0.5,
+               aes(fill = interaction(CO2, Nitrate, Iron))) + 
+  theme(title = element_text(size = 15, face = "bold"))  +
+  theme_pubr(legend = "none")+
+  scale_fill_brewer(name = "Condition", palette = "Paired") +
+  scale_color_brewer(name = "Condition", palette = "Paired") +
+  geom_dotplot(binaxis='y', stackdir='center', dotsize=1.3, 
+               aes(fill = interaction(CO2, Nitrate, Iron),
+                   color = interaction(CO2, Nitrate, Iron))) +
+  labs(title = "N content") + xlab(expression(CO[2]~" condition")) +
+  ggh4x::facet_nested_wrap(vars(Nitrate, Iron), nest_line = T) +
+  stat_compare_means(comparisons = list(c("ACO2", "ECO2")), vjust = 2, label = "p.signif") +
+  ylab("N content (% Dry Weight)") + 
+  theme(strip.background = element_blank(),
+        strip.text = element_text(size = 12)) + scale_x_discrete(labels=c("ACO2" = expression(ACO[2]),
+                                                                          "ECO2" = expression(ECO[2])))
+
+
+lm <- lm(data = data, N.~CO2 * Nitrate * Iron)
+summary(lm)
+
+```
+
+
+# N Absorption
+
+
+```{r}
+
+read.csv("../Data/N_Absorption.csv", h = T, sep = ';', dec = ',') %>%
+  mutate(N = str_replace(N, "0.5 mM", "Low nitrate"),
+         N = str_replace(N, "10 mM", "High nitrate"),
+         N = relevel(as.factor(N), ref = "High nitrate"),
+         CO2 = ifelse(CO2=="A", "ACO2", "ECO2")) %>%
+  ggplot(aes(x = CO2, y = Absorption)) + 
+  geom_boxplot(alpha = 0.3, color = "black", size = 0.2, width = 0.5,
+               aes(fill = interaction(CO2, N))) + 
+  theme(title = element_text(size = 15, face = "bold"))  +
+  theme_pubr(legend = "none")+
+  scale_fill_brewer(name = "Condition", palette = "Paired") +
+  scale_color_brewer(name = "Condition", palette = "Paired") +
+  geom_dotplot(binaxis='y', stackdir='center',
+               aes(fill = interaction(CO2, N),
+                   color = interaction(CO2, N))) + 
+  ggh4x::facet_nested_wrap(vars(N), nest_line = T, ncol = 1) +
+  stat_compare_means(comparisons = list(c("ACO2", "ECO2")), vjust = 2, 
+                     method = "wilcox.test",  label = "p.signif") +
+  ylab(expression("Absorption"~(mu~"mol/g/h"))) + ggtitle("Absorption")+ 
+  xlab(expression(CO[2]~" condition")) +
+  theme(strip.background = element_blank(),
+        strip.text = element_text(size = 12))+ 
+  scale_x_discrete(labels=c("ACO2" = expression(aCO[2]), 
+                            "ECO2" = expression(eCO[2])))
+```
+
+
+# Fe content
+
+
+```{r}
+data <- read.csv("../Data/Mineral_content.csv", h = T, sep = ';', na.strings = "#VALUE!")
+data$Nitrate <- ifelse(data$Nitrate=="10 mM", "Low nitrate", "High nitrate")
+data$Iron <- ifelse(data$Iron=="+Fe", "Iron supply", "Iron starvation")
+
+data$Nitrate <- relevel(factor(data$Nitrate), ref = "High nitrate")
+data$Iron <- relevel(factor(data$Iron), ref = "Iron supply")
+data$CO2 <- relevel(factor(data$CO2), ref = "ACO2")
+
+# outlier removal
+THR <- 3
+elements <- colnames(data)[4:ncol(data)]
+print(sum(is.na(data)))
+for(el in elements){
+  vals <- data[,el]
+  med <- median(na.omit(vals))
+  sd <- mad(na.omit(vals))
+  
+  condition <- vals < med - THR*sd | vals > med + THR*sd 
+  data[,el] <- ifelse(condition, NA, data[,el])
+}
+
+ggplot(data, aes(x = CO2, 
+                 y = Fe)) + 
+  geom_boxplot(alpha = 0.3, color = "black", size = 0.2, width = 0.5,
+               aes(fill = interaction(CO2, Nitrate, Iron))) + 
+  theme(title = element_text(size = 15, face = "bold"))  +
+  theme_pubr(legend = "none")+
+  scale_fill_brewer(name = "Condition", palette = "Paired") +
+  scale_color_brewer(name = "Condition", palette = "Paired") +
+  geom_dotplot(binaxis='y', stackdir='center', dotsize=1.3, 
+               aes(fill = interaction(CO2, Nitrate, Iron),
+                                         color = interaction(CO2, Nitrate, Iron))) +
+  labs(title = "Fe content") + xlab(expression(CO[2]~" condition")) +
+  ggh4x::facet_nested_wrap(vars(Nitrate, Iron), nest_line = T) +
+  stat_compare_means(comparisons = list(c("ACO2", "ECO2")), vjust = 2, label = "p.signif") +
+  ylab("microgram of Fe per g of plant") + 
+  theme(strip.background = element_blank(),
+        strip.text = element_text(size = 12))+ scale_x_discrete(labels=c("ACO2" = expression(ACO[2]),
+                                                                          "ECO2" = expression(ECO[2])))
+```
+
+
+
+
