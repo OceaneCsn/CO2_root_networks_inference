@@ -1,5 +1,5 @@
 ---
-  title: "Phenotypic analysis of the CO2 N Fe combinatorial experiment"
+title: "Phenotypic analysis of the CO2 N Fe combinatorial experiment"
 author: "Océane Cassan"
 output: html_document
 ---

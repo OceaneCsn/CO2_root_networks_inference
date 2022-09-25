@@ -1,0 +1,238 @@
+---
+title: "Phenotypic analysis of the CO2 N Fe combinatorial experiment"
+author: "Océane Cassan"
+output: html_document
+---
+  
+  
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  fig.height = 10,
+  fig.width = 12,
+  message = FALSE,
+  warning = FALSE
+)
+library(DIANE)
+library(tidyverse)
+library(ggpubr)
+library(ggh4x)
+```
+
+This document can be used to reproduce Figure 5 of the article, showing the coexpression clustering of genes differentially expressed by eCO2 under low N, accross the combination of CO2 and N perturbations.
+
+
+# Performing the clustering
+
+```{r}
+
+data <-
+  read.csv("../Data/raw_expression.csv",
+           h = T,
+           row.names = "Gene")
+
+annotate_condition <- function(condition) {
+  co2 <- substr(condition, 1, 1)
+  nitrate <- substr(condition, 2, 2)
+  iron <- substr(condition, 3, 3)
+  if (co2 == 'c')
+    res <- "ACO2"
+  else
+    res <- "ECO2"
+  if (nitrate == 'n')
+    res <- paste(res, "Low-Nitrate", sep = '.')
+  else
+    res <- paste(res, "High-Nitrate", sep = '.')
+  if (iron == 'f')
+    res <- paste(res, "Iron-starvation", sep = '.')
+  else
+    res <- paste(res, "Iron-supply", sep = '.')
+  return(res)
+}
+
+colnames(data) <-
+  paste0(
+    sapply(str_split_fixed(colnames(data), '_', 2)[, 1],
+           annotate_condition),
+    '_',
+    str_split_fixed(colnames(data), '_', 2)[, 2]
+  )
+
+########## normalization with tmm and filtering < 10 avg counts
+
+tcc_object <-
+  normalize(data, str_split_fixed(colnames(data), '_', 2)[, 1], iteration = FALSE)
+threshold = 10 * ncol(data)
+tcc_object <- filter_low_counts(tcc_object, threshold)
+normalized_counts <- TCC::getNormalizedData(tcc_object)
+normalized_counts <-
+  normalized_counts[, order(colnames(normalized_counts))]
+
+
+###################################### DEA
+
+fit <- estimateDispersion(tcc = tcc_object, conditions =
+                            str_split_fixed(colnames(data), '_', 2)[, 1])
+
+topTags <-
+  estimateDEGs(
+    fit,
+    reference = "ACO2.Low-Nitrate.Iron-supply",
+    perturbation = "ECO2.Low-Nitrate.Iron-supply",
+    p.value = 0.05,
+    lfc = 0
+  )
+genes <- topTags$table$genes
+
+
+##################################### Clustering of CO2*N conditions
+
+
+#removing iron starvation
+normalized_counts <-
+  normalized_counts[,!str_detect(colnames(normalized_counts), 'starvation')]
+
+# clustering while testing a broad range of number of clusters
+coseq <-
+  run_coseq(
+    conds = str_split_fixed(colnames(normalized_counts), '_', 2)[, 1],
+    genes = genes,
+    data = normalized_counts,
+    K = 9,
+    seed = 999,
+    transfo = "arcsin",
+    model = "Normal"
+  )
+
+bars <-
+  draw_coseq_run(coseq$model, plot = "barplots")$probapost_barplots +
+  ggtitle("Number of observations") + theme_pubr()
+
+```
+
+
+# Plotting the results
+
+Expression profiles and important genes for N nutrition within those clusters
+
+```{r}
+
+data <- normalized_counts
+conds <- str_split_fixed(colnames(normalized_counts), '_', 2)[, 1]
+nrow <- 2
+clusters <- coseq$membership
+k <- unique(clusters)
+
+conditions <-
+  colnames(data)[stringr::str_split_fixed(colnames(data),
+                                          "_", 2)[, 1] %in% conds]
+data <- data[names(clusters), conditions]
+profiles <- data.frame(data / rowSums(data))
+ylab <- "Normalized counts/Mean(Normalized counts)"
+
+profiles$gene <- rownames(profiles)
+d <- suppressMessages(reshape2::melt(profiles))
+d$group <- stringr::str_split_fixed(d$variable, "_",
+                                    2)[, 1]
+d$cluster <- clusters[match(d$gene, names(clusters))]
+d$geneRep <- paste0(d$gene, stringr::str_split_fixed(d$variable,
+                                                     "_", 2)[, 2])
+d$replicate <- stringr::str_split_fixed(d$variable, "_", 2)[, 2]
+d$group <- str_replace_all(d$group, "\\.", "\n")
+d$group <- str_replace_all(d$group, "Iron\nsupply", "")
+d$group <- fct_relevel(
+  d$group,
+  "ACO2\nHigh\nNitrate\n",
+  "ECO2\nHigh\nNitrate\n",
+  "ACO2\nLow\nNitrate\n",
+  "ECO2\nLow\nNitrate\n"
+)
+
+get_max_cond_prob <- function(gene) {
+  max(coseq$model@allResults$`K=9`[gene, ])
+}
+
+
+classes <-
+  list("5-7-8-9" = "Elevated CO2 cancels/lessens starvation regulations",
+       "2-3-6" = "Elevated CO2 reverses starvation regulations",
+       "4-1" = "Elevated CO2 specific regulations")
+
+d$class <- sapply(d$cluster,
+                  function(x) {
+                    return(as.character(classes[str_detect(names(classes), 
+                                                           as.character(x))]))
+                  })
+
+d$cluster <- fct_relevel(factor(d$cluster),
+                         "1", "4", "2", "3", "6", "5", "9", "7", "8")
+
+
+annot <-
+  read.table("../Data/Nitrate_genes_degs.csv",
+             sep = ";",
+             h = T)
+colnames(annot)[1] <- "label"
+
+
+get_n_genes <- function(cluster) {
+  return(paste(annot[annot$gene %in%
+                       intersect(get_genes_in_cluster(clusters, cluster), annot$gene), 
+                     "label"], collapse = ', '))
+}
+
+get_nb_genes <- function(cluster) {
+  return(length(get_genes_in_cluster(clusters, cluster)))
+}
+
+d$cluster_with_genes <- sapply(d$cluster, get_n_genes) |>
+  str_replace("NRT2.1, NAR2.1, NIR, GLN1.2, G6PD3",
+              "NRT2.1, NAR2.1, \nNIR, GLN1.2, G6PD3") |>
+  str_replace("BT1, BT2, GRXS13/ROXY18", "BT1, BT2, \nGRXS13/ROXY18")
+
+d$n_genes <- sapply(d$cluster, get_nb_genes)
+d$cluster_with_nb_genes <-
+  paste("Cluster", d$cluster, ':', d$n_genes, "genes")
+
+clustering_plot <-
+  ggplot(data = d[d$cluster %in% k, ], aes(x = group, y = value)) +
+  facet_nested_wrap(
+    bleed = F,
+    vars(class, cluster_with_nb_genes, cluster_with_genes),
+    nest_line = T,
+    scales = "free",
+    drop = TRUE,
+    ncol = 3
+  ) +
+  geom_line(lwd = 1.6,
+            alpha = 0.08,
+            aes(group = geneRep,
+                color = as.factor(class))) +
+  geom_boxplot(
+    alpha = 0.5,
+    lwd = 1,
+    color = "black",
+    outlier.color = "black",
+    outlier.alpha = 0.1
+  ) +
+  geom_jitter(width = 0.1, alpha = 0.0015) +
+  ggtitle("Normalized expression profiles in each cluster") + xlab("") +
+  ylab(ylab)  + scale_color_brewer(palette = "Set2") +
+  theme_pubr(legend = "none") +
+  theme(strip.background = element_blank(),
+        strip.text = element_text(size = 15))  +
+  theme(
+    plot.title = element_text(size = 18, face = "bold"),
+    strip.text.x = element_text(size = 12),
+    legend.position = "none",
+    legend.text = element_text(size = 20),
+    legend.title = element_text(size = 20, face = "bold"),
+    axis.text.y = element_text(size = 12, angle = 30),
+    axis.text.x = element_text(size = 10),
+    legend.text.align = 1,
+    axis.title = element_text(size = 15)
+  )
+clustering_plot
+```
+
+
