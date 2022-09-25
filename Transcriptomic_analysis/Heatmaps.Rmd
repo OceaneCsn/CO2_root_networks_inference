@@ -1,0 +1,136 @@
+---
+  title: "Phenotypic analysis of the CO2 N Fe combinatorial experiment"
+author: "Océane Cassan"
+output: html_document
+---
+  
+  
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  fig.height = 10,
+  fig.width = 12,
+  message = FALSE,
+  warning = FALSE
+)
+library(pheatmap)
+library(tidyverse)
+```
+
+This document can be used to reproduce Figure 3 of the article, on expression of genes relevant to N and Fe nutrition in the form of heatmaps under the CO2 * N * Fe combinatorial design.
+
+
+# Genes of N nutrition
+
+```{r}
+annot <- read.table("../Data/Nitrate_genes_degs.csv", sep = ";", h = T)
+colnames(annot)[1] <- "label"
+colnames(annot)[3] <- "Function"
+
+
+
+load("../Data/nitrate_genes.rdata")
+annot$label <- str_remove(annot$label, "/ROXY18")
+mat <- mat[rownames(mat) !="AT1G03850",]
+colnames(mat) <- str_remove(colnames(mat), ".Iron.supply|.Iron.stavration")
+rownames(mat) <- annot[match(rownames(mat), annot$gene),"label"]
+rownames(annot) <- annot$label
+
+# annot$Function <- str_replace(annot$Function, "of", "\nof")
+annot$Function <- relevel(as.factor(annot$Function), 
+                          ref = "Nitrate response, transport and assimilation")
+annot_cols <- data.frame("name" = colnames(mat), 
+                         "Nitrate" = str_split_fixed(colnames(mat), '\\.', 3)[,2],
+                         "CO2" = str_split_fixed(colnames(mat), '\\.', 2)[,1])
+rownames(annot_cols) <- annot_cols$name
+
+
+newnames <- lapply(
+  rownames(mat),
+  function(x) bquote(italic(.(x))))
+
+# scaling is a Z score
+#pheatmap((mat-rowMeans(mat))/genefilter::rowSds(mat)) is equivalent
+highN <- mat[!str_detect(colnames(mat), "Low.")]
+lowN <- mat[str_detect(colnames(mat), "Low.")]
+
+
+# separated highN and lowN to be further edited in inkscape
+pheatmap(lowN, scale = "row", 
+         annotation_row = annot["Function"], 
+         cluster_rows = F, cluster_cols = F, 
+         annotation_names_row = F, main = "", 
+         angle_col = 315, fontsize = 18, cellheight = 20, 
+         annotation_col = annot_cols[c("CO2", "Nitrate")],
+         fontsize_row = 18, gaps_row = c(6,9), 
+         gaps_col = c(3), show_colnames = F,
+         labels_row = as.expression(newnames), legend = T,
+         width = 10)
+
+pheatmap(highN, scale = "row", 
+         annotation_row = annot["Function"], 
+         cluster_rows = F, cluster_cols = F, 
+         annotation_names_row = F, main = "", 
+         angle_col = 315, fontsize = 18, cellheight = 20, 
+         annotation_col = annot_cols[c("CO2", "Nitrate")],
+         fontsize_row = 18, gaps_row = c(6,9), 
+         gaps_col = c(3), show_colnames = F,
+         labels_row = as.expression(newnames), legend = T, width = 10)
+```
+
+
+# Genes of Fe nutrition
+
+```{r}
+
+# iron genes infos
+iron <- read.csv("../Data/iron_genes.csv", h = F)
+iron$V1 <- toupper(str_trim(iron$V1))
+regulators <- iron[iron$V2 == "Regulateur", "V1"]
+structure <- iron[iron$V2 != "Regulateur", "V1"]
+iron$V3 <- str_trim(iron$V3)
+annot <- iron
+colnames(annot) <- c("label", "Function", "gene")
+rownames(annot) <- annot$label
+annot$Function <- str_replace(annot$Function, "srtucture", "Iron transport and metabolism")
+annot$Function <- str_replace(annot$Function, "Regulateur", "Regulation of iron genes")
+
+# expression data
+load("../Data/iron_genes_for_heatmaps.rdata")
+
+colnames(mat) <- str_remove(colnames(mat), ".High.Nitrate")
+rownames(mat) <- annot[match(rownames(mat), annot$gene), "label"]
+
+# annot$Function <- str_replace(annot$Function, "of", "\nof")
+annot$Function <- relevel(as.factor(annot$Function), ref = "Iron transport and metabolism")
+annot_cols <- data.frame("name" = colnames(mat), 
+                         "Iron" = str_split_fixed(str_split_fixed(colnames(mat), '\\.', 3)[,3], '_', 2)[,1],
+                         "CO2" = str_split_fixed(colnames(mat), '\\.', 2)[,1])
+
+rownames(annot_cols) <- annot_cols$name
+annot_cols$Iron <- relevel(as.factor(annot_cols$Iron), ref = "supply")
+
+# putting regulators together
+mat <- mat[c(rownames(mat)[1], rownames(mat)[8], rownames(mat)[2:7]),]
+
+
+mat <- mat[colnames(mat)[c(4,5,6,1,2,3,7,8,9,10,11,12)]]
+mat <- mat[!str_detect(rownames(mat), "S8H|CYP82C4|NAS4"),]
+#italic gene names
+newnames <- lapply(
+  rownames(mat),
+  function(x) bquote(italic(.(x))))
+# scaling is a Z score
+#pheatmap((mat-rowMeans(mat))/genefilter::rowSds(mat)) is equivalent
+pheatmap(mat, scale = "row", 
+         annotation_row = annot["Function"], 
+         cluster_rows = F, cluster_cols = F, 
+         annotation_names_row = F, main = "", 
+         angle_col = 315, fontsize = 18, cellheight = 20, 
+         fontsize_row = 18, gaps_row = c(2), 
+         gaps_col = c(3, 6, 9), show_colnames = T,
+         labels_row = as.expression(newnames), 
+         width = 10)
+
+```
+

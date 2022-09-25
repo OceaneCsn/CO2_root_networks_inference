@@ -6,7 +6,7 @@ This repository contains data and Rmarkdown scripts to reproduce the figures and
 
 ## Data
 
-Contains the necessary raw data, mainly in csv format
+The folder `Data` contains phenotypic observations and expression counts under the combinatorial design in csv format.
 
 ## Phenotypic analysis
 
@@ -24,6 +24,7 @@ Contains the scripts for :
 
 Many packages are used in those scripts, and can by installed from the CRAN in the usual way using `install.packages()`, except for DIANE, that should be installed as follows :
 
+### Dependencies
 
 ```
 library(remotes)

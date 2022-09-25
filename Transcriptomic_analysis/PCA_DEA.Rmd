@@ -23,7 +23,7 @@ library(ggrepel)
 library(ggeasy)
 ```
 
-This document can be used  observations on Arabidopsis thaliana under the CO2 * N * Fe combinatorial design.
+This document can be used to reproduce Figure 2 of the article, on the PCA and differential expression in *Arabidopsis thaliana* roots under the CO2 * N * Fe combinatorial design.
 
 
 ```{r}
