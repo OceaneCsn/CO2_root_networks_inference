@@ -15,6 +15,7 @@ knitr::opts_chunk$set(
 )
 library(tidyverse, quietly = T)
 library(ggpubr)
+library(ggh4x)
 ```
 
 This document plots and analyses the phenotypic observations on Arabidopsis thaliana under the CO2 * N * Fe combinatorial design.
@@ -47,7 +48,7 @@ ggplot(data, aes(x = CO2,
                aes(fill = interaction(CO2, N, Fe),
                                          color = interaction(CO2, N, Fe))) +
   labs(title = "Biomass") + xlab(expression(CO[2]~" condition")) +
-  ggh4x::facet_nested_wrap(vars(N, Fe), nest_line = T) +
+  facet_nested_wrap(vars(N, Fe), nest_line = T) +
   stat_compare_means(comparisons = list(c("ACO2", "ECO2")), 
                      vjust = 2, label = "p.signif") +
   ylab("Biomass (g/plant)") + 
@@ -92,7 +93,7 @@ ggplot(data, aes(x = CO2,
                aes(fill = interaction(CO2, Nitrate, Iron),
                    color = interaction(CO2, Nitrate, Iron))) +
   labs(title = "N content") + xlab(expression(CO[2]~" condition")) +
-  ggh4x::facet_nested_wrap(vars(Nitrate, Iron), nest_line = T) +
+  facet_nested_wrap(vars(Nitrate, Iron), nest_line = T) +
   stat_compare_means(comparisons = list(c("ACO2", "ECO2")), vjust = 2, label = "p.signif") +
   ylab("N content (% Dry Weight)") + 
   theme(strip.background = element_blank(),
@@ -126,7 +127,7 @@ read.csv("../Data/N_Absorption.csv", h = T, sep = ';', dec = ',') %>%
   geom_dotplot(binaxis='y', stackdir='center',
                aes(fill = interaction(CO2, N),
                    color = interaction(CO2, N))) + 
-  ggh4x::facet_nested_wrap(vars(N), nest_line = T, ncol = 1) +
+  facet_nested_wrap(vars(N), nest_line = T, ncol = 1) +
   stat_compare_means(comparisons = list(c("ACO2", "ECO2")), vjust = 2, 
                      method = "wilcox.test",  label = "p.signif") +
   ylab(expression("Absorption"~(mu~"mol/g/h"))) + ggtitle("Absorption")+ 

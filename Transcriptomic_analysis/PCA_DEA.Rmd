@@ -1,0 +1,253 @@
+---
+title: "Phenotypic analysis of the CO2 N Fe combinatorial experiment"
+author: "Océane Cassan"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  fig.height = 10,
+  fig.width = 12,
+  message = FALSE,
+  warning = FALSE
+)
+library(tidyverse, quietly = T)
+library(ggpubr)
+library(ggh4x)
+library(DIANE)
+library(patchwork)
+library(ade4)
+library(ggrepel)
+library(ggeasy)
+```
+
+This document can be used  observations on Arabidopsis thaliana under the CO2 * N * Fe combinatorial design.
+
+
+```{r}
+
+data <- read.csv("../Data/raw_expression.csv", h = T, row.names = "Gene")
+
+annotate_condition <- function(condition){
+  co2 <- substr(condition, 1,1)
+  nitrate <- substr(condition, 2,2)
+  iron <- substr(condition, 3,3)
+  if(co2 == 'c') res <- "ACO2"
+  else res <- "ECO2"
+  if(nitrate == 'n') res <- paste(res, "Low-Nitrate", sep = '.')
+  else res <- paste(res, "High-Nitrate", sep = '.')
+  if(iron == 'f') res <- paste(res, "Iron-starvation", sep = '.')
+  else res <- paste(res, "Iron-supply", sep = '.')
+  return(res)
+}
+
+colnames(data) <- paste0(sapply(str_split_fixed(colnames(data), '_', 2)[,1],  
+                                annotate_condition), '_', 
+                         str_split_fixed(colnames(data), '_', 2)[,2])
+
+
+tcc_object <- normalize(data, str_split_fixed(colnames(data), '_', 2)[,1], iteration = FALSE)
+threshold = 10*ncol(data)
+tcc_object <- DIANE::filter_low_counts(tcc_object, threshold)
+normalized_counts <- TCC::getNormalizedData(tcc_object)
+normalized_counts <- normalized_counts[,order(colnames(normalized_counts))]
+```
+
+
+# Principal Component Analysis
+
+```{r}
+acp <- dudi.pca(normalized_counts/rowMeans(normalized_counts), 
+                      center = TRUE, scale = TRUE, 
+                      scannf = FALSE, nf = 8)
+acp$co$condition = stringr::str_split_fixed(rownames(acp$co), 
+                                            "_", 2)[, 1]
+acp$co$condition <- str_replace_all(acp$co$condition, "\\.", "\n")
+
+acp$co$condition <- fct_relevel(acp$co$condition, 
+            "ACO2\nHigh-Nitrate\nIron-supply", "ECO2\nHigh-Nitrate\nIron-supply",
+            "ACO2\nLow-Nitrate\nIron-supply", "ECO2\nLow-Nitrate\nIron-supply",
+            "ACO2\nHigh-Nitrate\nIron-starvation", "ECO2\nHigh-Nitrate\nIron-starvation",
+            "ACO2\nLow-Nitrate\nIron-starvation", "ECO2\nLow-Nitrate\nIron-starvation")
+
+acp$co$replicate = stringr::str_split_fixed(rownames(acp$co), 
+                                            "_", 2)[, 2]
+
+scree <- data.frame(component = seq(1:length(acp$eig)), eigen.values = acp$eig, 
+                    explained.variance = round(acp$eig/sum(acp$eig) * 100, 2))
+scree <- scree[1:min(nrow(scree), 8), ]
+
+for(col in colnames(acp$li)){
+  acp$li[,paste0(col, "norm")] <- acp$li[,col]/max(acp$li[,col])
+}
+
+
+variable_plot <- function(pcx, pcy){
+  g <- ggplot(data = acp$co, aes_string(
+    x = paste0("Comp",pcx),
+    y = paste0("Comp",pcy)))+
+    geom_vline(xintercept = 0) + 
+    geom_hline(yintercept = 0) + 
+    geom_point(data = acp$li, 
+               aes_string(y = paste0("Axis",pcy,"norm"), 
+                          x = paste0("Axis",pcx,"norm")), 
+               color = "black", alpha = 0.25, size = 0.7)+
+    geom_point(aes(fill = condition), shape = 21, size = 5, 
+               stroke = 1, colour = "black")+
+    geom_segment(aes_string(xend=paste0("Comp",pcx), 
+                            yend= paste0("Comp",pcy), 
+                            x = 0, y = 0, 
+                            color = "condition"), size = 1)  + 
+    ggtitle(paste("Principal Components", pcx, "and", pcy )) + 
+    xlab(paste(paste0("Comp",pcx), 
+                        scree[pcx, "explained.variance"], "%")) + 
+    ylab(paste(paste0("Comp",pcy), 
+                        scree[pcy, "explained.variance"], "%")) +
+    scale_fill_brewer(name = "PCA loadings", palette = "Paired")+
+    scale_color_brewer(palette = "Paired")+
+    theme_pubr(legend = "none")+ 
+    theme(legend.position = "none", 
+                   title = element_text(size = 15, face = "bold"),
+                   axis.title = element_text(size = 15, face = "bold")) + 
+    xlim(min(acp$co[,paste0("Comp",pcx)])-0.1, max(acp$co[,paste0("Comp",pcx)])+0.1) +
+    ylim(min(acp$co[,paste0("Comp",pcy)])-0.1, max(acp$co[,paste0("Comp",pcy)])+0.1)
+  return(g)
+}
+
+
+screeplot <- ggplot(scree, aes(y = explained.variance, 
+                               x = component, fill = component, 
+                               label = paste(round(explained.variance, 1), "%"))) + 
+  geom_bar(stat = "identity") + 
+  geom_text(size = 6, vjust = 1.3, color = "white") + 
+  ggtitle("Screeplot")  +
+  theme_pubr(legend = "none") + ylab("% of explained variance") + 
+  theme(legend.position = "none",
+        title = element_text(size = 20, face = "bold"))+ 
+  xlab("Principal Component")
+
+```
+
+
+# Differential expression analyses
+
+EdgeR is used to compute DEGs by eCO2, under the 4 combinations of N and Fe nutrition.
+
+
+```{r}
+
+FDR = 0.05
+LFC = 0
+
+colnames(normalized_counts)
+
+res <- data.frame("Reference" = c("ACO2.High-Nitrate.Iron-supply",
+                                  "ACO2.Low-Nitrate.Iron-supply",
+                                  "ACO2.High-Nitrate.Iron-starvation",
+                                  "ACO2.Low-Nitrate.Iron-starvation"),
+                  "Perturbation" = c("ECO2.High-Nitrate.Iron-supply",
+                                     "ECO2.Low-Nitrate.Iron-supply",
+                                     "ECO2.High-Nitrate.Iron-starvation",
+                                     "ECO2.Low-Nitrate.Iron-starvation"),
+                  "Number of DEGs" = 1)
+
+
+
+fit <- DIANE::estimateDispersion(tcc_object, str_split_fixed(colnames(tcc_object$count), '_', 2)[,1])
+
+for(i in 1:nrow(res)){
+  DEgenes <- DIANE::estimateDEGs(fit,
+                                 reference = res$Reference[i],
+                                 perturbation = res$Perturbation[i],
+                                 p.value = FDR,
+                                 lfc = LFC
+  )$table
+  acp$li[,paste0(res$Reference[i], '-', res$Perturbation[i])] <- 
+    ifelse(rownames(acp$li) %in% DEgenes$genes, "TRUE", "FALSE")
+  res$Number.of.DEGs[i] <- nrow(DEgenes)
+}
+
+#write results into csv files :
+
+
+# for(i in 1:nrow(res)){
+#   DEgenes <- DIANE::estimateDEGs(fit,
+#                                  reference = res$Reference[i],
+#                                  perturbation = res$Perturbation[i],
+#                                  p.value = FDR,
+#                                  lfc = LFC
+#   )$table
+#   DEgenes[c("label", "description")]<- gene_annotations$`Arabidopsis thaliana`[DEgenes$genes,] 
+#   write_tsv(DEgenes, file = paste0("Results/DEGs_", res$Perturbation[i], '_vs_', res$Reference[i],'.tsv'))
+# }
+
+res$Reference <- str_replace_all(res$Reference, "\\.", "\n")
+res$Perturbation <- str_replace_all(res$Perturbation, "\\.", "\n")
+
+
+res$Reference <- fct_relevel(res$Reference, 
+                                "ACO2\nHigh-Nitrate\nIron-supply", 
+                                "ACO2\nLow-Nitrate\nIron-supply", 
+                                "ACO2\nHigh-Nitrate\nIron-starvation",
+                                "ACO2\nLow-Nitrate\nIron-starvation")
+
+res$Perturbation <- fct_relevel(res$Perturbation, 
+                             "ECO2\nHigh-Nitrate\nIron-supply", 
+                             "ECO2\nLow-Nitrate\nIron-supply", 
+                             "ECO2\nHigh-Nitrate\nIron-starvation",
+                             "ECO2\nLow-Nitrate\nIron-starvation")
+
+df <- data.frame(Condition = c(res$Perturbation, res$Reference))
+df$Condition <- fct_relevel(df$Condition,
+                            "ACO2\nHigh-Nitrate\nIron-supply", 
+                            "ECO2\nHigh-Nitrate\nIron-supply",
+                            "ACO2\nLow-Nitrate\nIron-supply", 
+                            "ECO2\nLow-Nitrate\nIron-supply", 
+                            "ACO2\nHigh-Nitrate\nIron-starvation",
+                            "ECO2\nHigh-Nitrate\nIron-starvation",
+                            "ACO2\nLow-Nitrate\nIron-starvation",
+                            "ECO2\nLow-Nitrate\nIron-starvation")
+                            
+df$X <- rep(c(5300, -1500), each = 4)
+df$Y <- rep(paste(res$Reference, "VS", res$Perturbation), 2)
+res$comparison <- fct_relevel(factor(paste(res$Reference, "VS", res$Perturbation)), 
+                              "ACO2\nHigh-Nitrate\nIron-supply VS ECO2\nHigh-Nitrate\nIron-supply",
+                              "ACO2\nLow-Nitrate\nIron-supply VS ECO2\nLow-Nitrate\nIron-supply",
+                              "ACO2\nHigh-Nitrate\nIron-starvation VS ECO2\nHigh-Nitrate\nIron-starvation",
+                              "ACO2\nLow-Nitrate\nIron-starvation VS ECO2\nLow-Nitrate\nIron-starvation")
+
+df$Y<- fct_relevel(factor(df$Y), 
+               "ACO2\nHigh-Nitrate\nIron-supply VS ECO2\nHigh-Nitrate\nIron-supply",
+               "ACO2\nLow-Nitrate\nIron-supply VS ECO2\nLow-Nitrate\nIron-supply",
+               "ACO2\nHigh-Nitrate\nIron-starvation VS ECO2\nHigh-Nitrate\nIron-starvation",
+               "ACO2\nLow-Nitrate\nIron-starvation VS ECO2\nLow-Nitrate\nIron-starvation")
+
+degs <- ggplot(res, aes(x = comparison,
+                y = Number.of.DEGs, label = Number.of.DEGs)) + 
+  geom_label_repel(data = df, aes(x = Y, y = X, 
+                       label = Condition, fill = Condition), alpha = 0.8, size = 6)+ 
+  geom_bar(width = 0.2, stat = "identity", color = "lightgray", alpha = 0.3) +  
+  geom_text(size = 9, nudge_y = 0) +
+  coord_flip() + 
+  theme_pubr(legend = "none") + 
+  theme(axis.ticks.y = element_blank(),
+                       axis.text.y = element_blank()) + 
+  ggtitle("Number of DEGs under eCO2")+ 
+  theme(plot.title = element_text(size = 20, face = "bold"))+
+  scale_fill_brewer(palette = "Paired") + 
+  xlab("Condition comparison") + 
+  ylab("Number of differentially expressed genes") + 
+  easy_remove_y_axis(what = c("ticks", "title", "line"), teach = FALSE)
+```
+
+# Plotting the final figure
+
+
+
+```{r, fig.height=12, fig.width=15}
+plot <- (variable_plot(1,2) / variable_plot(3,4) / variable_plot(5,6) ) | (screeplot / degs);plot
+```
+
+
