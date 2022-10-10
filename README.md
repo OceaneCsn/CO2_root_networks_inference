@@ -6,11 +6,12 @@ This repository contains data and Rmarkdown scripts to reproduce the figures and
 
 ## Data
 
-The folder `Data` contains phenotypic observations and expression counts under the combinatorial design in csv format.
+The folder `Data` contains phenotypic observations and expression counts under the combinatorial design in csv format. `Data/Candidates` contains the phenptypes of the candidate genes identified in GRN inference.
 
 ## Phenotypic analysis
 
 Contains the code for biomass, N content, Fe content, and N absorption plots under the combinatorial design.
+It also contains the code for the validation of candidate genes (genotype x CO2 interaction tests, and figure).
 
 ## Transcriptomic analysis
 
