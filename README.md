@@ -17,15 +17,22 @@ It also contains the code for the validation of candidate genes (genotype x CO2 
 
 Contains the scripts for : 
 
-+ Transcriptome normalisation, PCA, and differential expression analyses
++ Transcriptome normalisation, PCA, and differential expression analyses (`PCA_DEA.Rmd`)
 
-+ Co-expression clustering with [Coseq](https://www.bioconductor.org/packages/release/bioc/html/coseq.html)
++ Heatmaps for nitrate and iron nutrition genes (`Hetamaps.Rmd`)
 
-+ Gene Regulatory Network inference with [DIANE](https://oceanecsn.github.io/DIANE/)
++ Co-expression clustering with [Coseq](https://www.bioconductor.org/packages/release/bioc/html/coseq.html) (`Coexpression_clustering.Rmd`)
+
++ Gene Regulatory Network inference with [DIANE](https://oceanecsn.github.io/DIANE/) (`GRN_inference.Rmd`)
+
++ Gene Regulatory Network exploration, validation, and visualisation (`GRN_analysis.Rmd`)
+
+
+### Dependencies
+
 
 Many packages are used in those scripts, and can by installed from the CRAN in the usual way using `install.packages()`, except for DIANE, that should be installed as follows :
 
-### Dependencies
 
 ```
 library(remotes)
