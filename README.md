@@ -10,8 +10,8 @@ The folder `Data` contains phenotypic observations and expression counts under t
 
 ## Phenotypic analysis
 
-Contains the code for biomass, N content, Fe content, and N absorption plots under the combinatorial design.
-It also contains the code for the validation of candidate genes (genotype x CO2 interaction tests, and figure).
+Contains the code for biomass, N content, Fe content, and N absorption plots under the combinatorial design (`Phenotype_anamysis.Rmd`).
+It also contains the code for the validation of candidate genes (genotype x CO2 interaction tests and figure in `Candidate_regulators.Rmd`).
 
 ## Transcriptomic analysis
 
