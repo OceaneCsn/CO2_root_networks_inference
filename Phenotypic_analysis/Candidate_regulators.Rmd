@@ -1,0 +1,200 @@
+---
+title: "Candidate genes validation"
+author: "Océane"
+date: "2022-10-10"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ggpubr)
+library(patchwork)
+```
+
+# Context
+
+This document presents the figure and linear models for the experimental validation of the top regulators of the inferred GRNs.
+
+# Data import
+
+```{r}
+# biomass
+data <- read.csv("../Data/Candidates/OC_10_biomass.csv", sep = ';') %>%
+  filter(!str_detect(Tube_vide, "Date")) %>%
+  mutate(Dry_mass = (parse_number(Tube_masse_seche)-
+                       parse_number(Tube_vide))*1000) %>%
+  mutate(Fresh_mass = (parse_number(Tube_masse_fraiche)-
+                         parse_number(Tube_vide))*1000) %>%
+  rename(Tube=ID) %>%
+  select(Tube, Dry_mass, Fresh_mass) %>% 
+  inner_join(read.csv("../Data/Candidates/OC_10_annotation.tsv", sep = '\t'), by="Tube") %>%
+  filter(Dry_mass >0) %>%
+  mutate(CO2 = relevel(factor(ifelse(CO2 == "A", "aCO2", "eCO2")), ref = "aCO2"))%>%
+  mutate(Genotype=tolower(Genotype))%>%
+  mutate(Genotype = str_replace(Genotype, "col", "Col")) %>%
+  mutate(Genotype = relevel(factor(Genotype), ref = "Col"))  %>%
+  mutate(Genotype = relevel(factor(Genotype), ref = "Col"),
+         Genotype_labs = ifelse(Genotype %in% c("Col", "WS"),
+                                 paste0(Genotype), 
+                                 paste0("italic(", paste0(Genotype), ")")),
+         Signif = ifelse(Genotype == "myb15", "***", 
+                         ifelse(Genotype == "wox11", "*", "")))  %>%
+  na.omit()
+
+
+data_EDF3 <- read.csv("../Data/Candidates/AM_09_biomass.csv", sep = ';',   na.strings = "") %>%
+  na.omit() %>%
+  mutate(Dry_mass = (parse_number(MasseSeche)-
+                       parse_number(TubeVide))*1000) %>%
+  select(Tube, Dry_mass) %>% 
+  inner_join(read.csv("../Data/Candidates/AM_09_annotation.tsv", sep = '\t'), by="Tube") %>%
+  filter(Dry_mass >0) %>%
+  mutate(CO2 = relevel(factor(ifelse(CO2 == "A", "aCO2", "eCO2")), ref = "aCO2")) %>% 
+  filter(Genotype %in% c("WS", "EDF3")) %>%
+  mutate(Genotype = relevel(factor(Genotype), ref = "WS")) %>%
+  mutate(Genotype=tolower(Genotype))%>%
+  mutate(Genotype = str_replace(Genotype, "ws", " WS")) %>%
+  mutate(Genotype = relevel(factor(Genotype), ref = " WS"),
+         Genotype_labs = ifelse(Genotype %in% c("COL8", " WS"),
+                                paste0(Genotype), 
+                                paste0("italic(", Genotype, ")")),
+         Signif = ifelse(Genotype == "edf3", "*", "")) 
+
+####### N content
+dataN <- read.csv("../Data/Candidates/OC_11_NC.csv", sep = ';') %>%
+  rename(Tube = Echantillon, N = X..N, C=X..C) %>% 
+  inner_join(read.csv("../Data/Candidates/OC_11_annotation.tsv", sep = '\t'), by="Tube") %>%
+  mutate(CO2 = relevel(factor(ifelse(CO2 == "A", "aCO2", "eCO2")), ref = "aCO2"))%>%
+  mutate(Genotype=tolower(Genotype))%>%
+  mutate(Genotype = str_replace(Genotype, "col", "Col")) %>%
+  mutate(Genotype = relevel(factor(Genotype), ref = "Col"),
+         Genotype_labs = ifelse(Genotype %in% c("Col", "WS"),
+                                paste0(Genotype), 
+                                paste0("italic(", Genotype, ")"))) 
+
+data_EDF3_N <- read.csv("../Data/Candidates/AM_09_NC.csv", sep = '\t') %>%
+  rename(Tube = Echantillon, N = X..N, C=X..C) %>% 
+  inner_join(read.csv("../Data/Candidates/AM_09_annotation.tsv", sep = '\t'), by="Tube") %>%
+  mutate(CO2 = relevel(factor(ifelse(CO2 == "A", "aCO2", "eCO2")), ref = "aCO2")) %>% 
+  filter(Genotype %in% c("WS", "EDF3")) %>%
+  mutate(Genotype = relevel(factor(Genotype), ref = "WS")) %>%
+  mutate(Genotype=tolower(Genotype))%>%
+  mutate(Genotype = str_replace(Genotype, "ws", " WS")) %>%
+  mutate(Genotype = relevel(factor(Genotype), ref = " WS"),
+         Genotype_labs = ifelse(Genotype %in% c("COL8", " WS"),
+                                paste0(Genotype), 
+                                paste0("italic(", Genotype, ")"))) 
+
+```
+
+# Linear models
+
+## Biomass 
+
+For all candidate genes excepts EDF3:
+
+```{r}
+summary(lm(data = data, Dry_mass ~ CO2*Genotype))
+```
+For EDF3 : 
+
+```{r}
+summary(lm(data = data_EDF3, Dry_mass ~ CO2*Genotype))
+```
+## N content
+
+For all candidates except EDF3
+
+```{r}
+summary(lm(data = dataN, N ~ CO2*Genotype))
+```
+
+For EDF3:
+```{r}
+summary(lm(data = data_EDF3_N, N ~ CO2*Genotype))
+```
+
+
+# Figure
+
+```{r, fig.width=5, fig.height=5}
+biomass_myb <- data %>% 
+  ggplot( aes(x = CO2, y = Dry_mass)) + 
+  geom_jitter(width = 0.1, alpha = 0.25, size = 0.8)+
+  stat_summary(aes(col = CO2), fun=mean, geom="point",  size=2) +
+  stat_summary(aes(col = CO2), fun.data = mean_sd,  
+               geom = "errorbar", width = 0)+
+  facet_wrap(vars(Genotype_labs),  
+             ncol = 6, labeller = labeller(Genotype_labs = label_parsed), 
+             strip.position = "bottom")+
+  ylab("biomass (mg)")+
+  theme_pubr(legend = 'top')+ xlab("")+
+  theme(strip.background = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.text.x = element_blank(),
+        strip.text = element_text(size = 10, angle = -60)) +
+  scale_color_brewer(palette = "Set2")
+
+
+N_myb <- dataN %>% 
+  ggplot( aes(x = CO2, y = N)) + 
+  geom_jitter(width = 0.1, alpha = 0.25, size = 0.8)+
+  stat_summary(aes(col = CO2), fun=mean, geom="point",  size=2) +
+  stat_summary(aes(col = CO2), fun.data = mean_sd,  
+               geom = "errorbar", width = 0)+
+  facet_wrap(vars(Genotype_labs),  ncol = 6, labeller = label_parsed, 
+             strip.position = "bottom")+
+  ylab("N content (%)")+
+  theme_pubr(legend = 'none')+ xlab("")+
+  theme(strip.background = element_blank(), 
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        strip.text = element_text(size = 10, angle = -60)) +
+  scale_color_brewer(palette = "Set2",labels = expression(aCO[2], eCO[2]), 
+                     name = expression(CO[2]))
+
+
+# standard boxplots
+biomass_edf3 <- data_EDF3 %>% 
+  ggplot( aes(x = CO2, y = Dry_mass)) + 
+  geom_jitter(width = 0.1, alpha = 0.25, size = 0.8)+
+  stat_summary(aes(col = CO2), fun=mean, geom="point", size=2) +
+  stat_summary(aes(col = CO2), fun.data = mean_sd,  
+               geom = "errorbar", width = 0)+
+  facet_wrap(vars(Genotype_labs),  
+             ncol = 6, labeller = labeller(Genotype_labs = label_parsed), 
+             strip.position = "bottom")+
+  ggtitle("") + 
+  ylab("biomass (mg)")+
+  theme_pubr(legend = 'none')+ xlab("")+
+  theme(strip.background = element_blank(),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        strip.text = element_text(size = 10, angle = -60)) +
+  scale_color_brewer(palette = "Set2")
+
+N_edf3 <- data_EDF3_N %>% 
+  ggplot( aes(x = CO2, y = N)) + 
+  geom_jitter(width = 0.1, alpha = 0.25, size = 0.8)+
+  stat_summary(aes(col = CO2), fun=mean, geom="point",  size=2) +
+  stat_summary(aes(col = CO2), fun.data = mean_sd,  
+               geom = "errorbar", width = 0)+
+  facet_wrap(vars(Genotype_labs),  ncol = 6, labeller = label_parsed, 
+             strip.position = "bottom")+
+  ylab("N content (%)")+
+  theme_pubr(legend = 'none')+ xlab("")+
+  theme(strip.background = element_blank(), 
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        strip.text = element_text(size = 10, angle = -60)) +
+  scale_color_brewer(palette = "Set2") + ylim(c(6,7.5))
+
+
+plot <- biomass_myb  + biomass_edf3 + N_myb  + N_edf3 + 
+  patchwork::plot_layout(widths = c(3,1)) + 
+  plot_annotation(tag_levels = 'a'); plot
+```
+
+
+
