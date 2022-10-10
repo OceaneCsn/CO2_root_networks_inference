@@ -1,7 +1,7 @@
-# Code and data for Cassan et al. 202X
+# Code and data for "A gene regulatory network reveals features and regulators of the root response to elevated CO2 in Arabidopsis", O. Cassan et al., 202X.
 
 
-This repository contains data and Rmarkdown scripts to reproduce the figures and analyses from "A gene regulatory network reveals features and regulators of the root response to eCO$_2$ in Arabidopsis", O. Cassan et al., 202X.
+This repository contains data and Rmarkdown scripts to reproduce the figures and analyses from "A gene regulatory network reveals features and regulators of the root response to elevated CO2 in Arabidopsis", O. Cassan et al., 202X.
 
 
 ## Data

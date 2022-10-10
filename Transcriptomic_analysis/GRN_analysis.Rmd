@@ -1,0 +1,325 @@
+---
+title: "Network analysis"
+author: "Océane"
+date: "2022-10-10"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.width = 10, fig.height = 7)
+library(tidyverse)
+library(DIANE)
+library(igraph)
+library(ggraph)
+library(RColorBrewer)
+load(file = "../Data/network_N_CO2.RData")
+```
+
+
+# Context
+
+This files loads the results from GRN inference (as given by `Transcriptomic_analysis/GRN_inference.R`), and provides various analyses of its output.
+
+
+# Degree distribution of the GRN
+
+```{r, fig.width = 5, fig.height = 4}
+draw_network_degrees <- function (nodes, graph)
+{
+  targets <- nodes[nodes$gene_type == "Target Gene", "id"]
+  TFs <- nodes[nodes$gene_type == "Regulator" | nodes$gene_type ==
+                 "Grouped Regulators", "id"]
+  degree_in_targets <-
+    degree(graph, mode = "in", v = targets)
+  degree_in_tfs <- degree(graph, mode = "in", v = TFs)
+  degree_out_tfs <- degree(graph, mode = "out", v = TFs)
+  betweenness <- betweenness(graph, weights = NA, v = TFs)
+  deg_targ = data.frame(degree_in_targets)
+  Node_nw_st <-
+    data.frame(degree_in_tfs, degree_out_tfs, betweenness)
+  deg_in_targ <-
+    ggplot(data = deg_targ, aes(x = degree_in_targets)) +
+    geom_histogram(fill = "#69b3a2",
+                   alpha = 0.7) + ggtitle("In-Degree distribution of target genes") + theme_pubr() +
+    theme(
+      plot.title = element_text(size = 16),
+      axis.text.x = element_text(size = 15),
+      axis.title.x = element_blank(),
+      axis.title.y = element_blank()
+    )
+  deg_in_tfs <-
+    ggplot(data = Node_nw_st, aes(x = degree_in_tfs)) + theme_pubr() +
+    geom_histogram(fill = "#69b3a2",
+                   alpha = 0.7) + ggtitle("In-Degree distribution of regulators") +
+    theme(
+      plot.title = element_text(size = 16),
+      axis.text.x = element_text(size = 15),
+      axis.title.x = element_blank(),
+      axis.title.y = element_blank()
+    )
+  deg_out_tfs <-
+    ggplot(data = Node_nw_st, aes(x = degree_out_tfs)) + theme_pubr() +
+    geom_histogram(fill = "#69b322",
+                   alpha = 0.7) + ggtitle("Out-Degree distribution of regulators") +
+    theme(
+      plot.title = element_text(size = 16),
+      axis.text.x = element_text(size = 15),
+      axis.title.x = element_blank(),
+      axis.title.y = element_blank()
+    )
+  bet <-
+    ggplot(data = Node_nw_st, aes(x = betweenness)) + theme_pubr() +
+    geom_histogram(fill = "#E69F00",
+                   alpha = 0.7) + ggtitle("Betweeness distribution of regulators") +
+    theme(
+      plot.title = element_text(size = 16),
+      axis.text.x = element_text(size = 15),
+      axis.title.x = element_blank(),
+      axis.title.y = element_blank()
+    )
+  return(deg_in_targ + deg_in_tfs + deg_out_tfs + bet)
+}
+
+draw_network_degrees(network_N_CO2$network_data$nodes, network_N_CO2$network)
+```
+
+# Ranking the candidate genes
+
+The final ranking is made of the top 12 regulators in terms of overall degree.
+
+```{r}
+edges <- network_N_CO2$network_data$edges
+nodes <- network_N_CO2$network_data$nodes
+table(nodes$group)
+
+# annotation of candidate regulators in the network
+labs <- toupper(
+  c(
+    "myb93",
+    "tcp8",
+    "wox11",
+    "wrky59",
+    "edf3",
+    "trfl6",
+    "zf2",
+    "agl14",
+    "myb85",
+    "myb15"
+  )
+)
+annot <- gene_annotations$`Arabidopsis thaliana`
+annot$gene <- rownames(annot)
+candidates <- annot[annot$label %in% labs |
+                      annot$gene %in%
+                      c("AT5G43175", "AT2G29060"),
+                    c("label", "gene")]
+nodes$candidate <-
+  ifelse(str_detect(nodes$id, paste(candidates$gene, collapse = '|')),
+         "Candidate", "")
+# annotation of nitrate genes in the network
+n_genes <- read.csv(file = "../Data/N-related-genes-in-network.csv", sep = ';', h = T)
+nodes$nitrate_gene <- ifelse(
+  str_detect(nodes$id,paste(n_genes$AGI, collapse = '|')), 
+  "N-related gene", "")
+
+
+ranking <- nodes[order(-nodes$degree),]
+ranking$rank <- 1:nrow(ranking)
+final_ranking <- ranking[1:12,c("label", "community_sbm", "degree", "rank")]
+colnames(final_ranking)[2] <- "community"
+final_ranking["AT5G43175", 'label'] <- "AT5G43175 (bHLH)"
+final_ranking$rank[11:12] <- c(10,10);final_ranking
+```
+# Network visualisation
+
+
+```{r}
+# removing little disconnected subnetworks for visualisation
+graph <- graph_from_data_frame(edges)
+components <- clusters(graph, mode="weak")
+biggest_cluster_id <- which.max(components$csize)
+vert_ids <- V(graph)[components$membership == biggest_cluster_id]
+graph <- induced_subgraph(graph, vert_ids)
+
+# creation of layout object
+layout <- ggraph::create_layout(graph, layout = "stress")
+layout[c("label", "degree", "community_sbm", "gene_type", "candidate", "nitrate_gene")] <- 
+  nodes[match(layout$name, nodes$id), 
+                 c("label", "degree", "community_sbm", "gene_type", "candidate", "nitrate_gene")]
+layout$regulator <- ifelse(str_detect(layout$gene_type, "egul"), "Regulator", "Target")
+layout$regulator <- relevel(factor(layout$regulator), ref = "Target")
+layout$size <- ifelse(str_detect(layout$gene_type, "ouped"), "Grouped regulators", "other")
+layout$size <- relevel(factor(layout$size), ref = "other")
+
+layout$gene_type <- fct_relevel(factor(layout$gene_type), 
+                                c("Regulator", "Grouped Regulators", "Target Gene"))
+layout$candidate_label <- ifelse(layout$candidate == "Candidate", layout$label, "")
+layout$nitrate_label <- ifelse(layout$nitrate_gene == "N-related gene", layout$label, "")
+
+```
+
+## Network view with candidates highlighted
+
+```{r, fig.width = 4, fig.height = 4}
+cands <- ggraph(layout) + 
+  geom_edge_link(color = "grey") + 
+  geom_node_point(aes(shape = regulator, size = candidate,
+                      fill = candidate , alpha = candidate), stroke = 0.3, 
+                  color = "black", show.legend = F) +
+  scale_shape_manual(values=c(21,22)) + 
+  scale_size_manual(values = c(1.5, 5)) + 
+  scale_alpha_manual(values = c(0.3, 1))+ 
+  scale_fill_manual(values = c("lightgrey", '#cd5b45'))+
+  geom_node_label(aes(label = candidate_label, alpha = candidate, color = community_sbm),
+                  color = '#cd5b45', size = 3.5, nudge_y = 0,
+                  label.padding = 0.1, repel = TRUE, 
+                  max.overlaps = 100, show.legend = F) + 
+  theme_void();cands
+```
+
+## Network view with nitrate-related genes highlighted
+
+```{r, fig.width = 4, fig.height = 4}
+n_related <- ggraph(layout) + 
+  geom_edge_link(color = "grey") + 
+  geom_node_point(aes(shape = regulator, size = nitrate_gene,
+                      fill = nitrate_gene , alpha = nitrate_gene), stroke = 0.3, 
+                  color = "black", show.legend = F) +
+  scale_shape_manual(values=c(21,22)) + 
+  scale_size_manual(values = c(1.5, 4.5)) + 
+  scale_alpha_manual(values = c(0.3, 1))+ 
+  scale_fill_manual(values = c("lightgrey", '#1f9f7b'))+
+  geom_node_label(aes(label = nitrate_label, alpha = nitrate_gene, color = community_sbm),
+                  color = '#1f9f7b', size = 3.5, nudge_y = 0.1,
+                  label.padding = 0.1, repel = TRUE, 
+                  max.overlaps = 200, show.legend = F) + 
+  theme_void();n_related
+```
+
+## Network view with topological clusters
+
+Modules given by SBM clustering are shown below.
+
+
+```{r, fig.width = 4, fig.height = 4}
+nb.cols <- max(layout$community_sbm)
+mycolors <- colorRampPalette(brewer.pal(11, "Paired"))(nb.cols)
+
+sbm_comm <- ggraph(layout) +
+  geom_edge_link(color = "grey") + 
+  geom_node_point(aes(shape = regulator, size = gene_type,
+                      fill = factor(community_sbm)), stroke = 0.25, 
+                  color = "black", show.legend = T) +
+  scale_shape_manual(values=c(21,22), guide = 'none') + 
+  scale_size_manual(values = c(2,3,1.5)*1.8, guide = 'none') + theme_void()+
+  scale_fill_manual(name = "Community\nmembership", 
+                    values = mycolors) + 
+  guides(fill = guide_legend(override.aes = list(shape = 21, size = 5))) + 
+  theme(legend.position = "bottom", 
+        legend.text = element_text(size = 15),
+        legend.title = element_text(size = 15)); sbm_comm
+```
+
+
+# Network validation against connecTF
+
+```{r, fig.width = 4, fig.height = 3}
+source("evaluateNetwork.R")
+results <- evaluate_network(edges)
+draw_evaluated_network <- function (results)
+{
+  biggest_component_only = TRUE
+  graph <- graph_from_data_frame(results$edges)
+  if (biggest_component_only) {
+    components <- clusters(graph, mode = "weak")
+    biggest_cluster_id <- which.max(components$csize)
+    vert_ids <- V(graph)[components$membership ==
+                           biggest_cluster_id]
+    graph <- induced_subgraph(graph, vert_ids)
+  }
+  layout <- ggraph::create_layout(graph, layout = "stress")
+  layout$gene_type <-
+    ifelse(layout$name %in% edges$from, "Regulator",
+           "Target")
+  layout$gene_type <- ifelse(
+    stringr::str_detect(layout$name,
+                        "mean_"),
+    "Grouped regulators",
+    layout$gene_type
+  )
+  layout$regulator <-
+    relevel(factor(layout$gene_type), ref = "Target")
+  if ("Grouped regulators" %in% layout$gene_type)
+    layout$gene_type <-
+    forcats::fct_relevel(factor(layout$gene_type),
+                         c("Regulator", "Grouped regulators",
+                           "Target"))
+  else
+    layout$gene_type <- forcats::fct_relevel(factor(layout$gene_type),
+                                             c("Regulator", "Target"))
+  layout$regulator <- ifelse(stringr::str_detect(layout$gene_type,
+                                                 "egulator"),
+                             "Regulator",
+                             "Target")
+  layout$regulator <-
+    relevel(factor(layout$regulator), ref = "Target")
+  colors <-
+    c(
+      `Not supported` = "#393939",
+      `TF not studied` = "grey",
+      CHIPSeq = "#0C7C59",
+      DAPSeq = "#aceca1",
+      TARGET = "#FAC05E",
+      `CHIPSeq+DAPSeq` = "red",
+      `DAPSeq+TARGET` = "#749bcd",
+      `TARGET+DAPSeq` = "#749bcd",
+      `CHIPSeq+DAPSeq+TARGET` = "green"
+    )
+  val <-
+    ggraph::ggraph(layout) + ggraph::geom_edge_link(
+      aes(
+        alpha = !stringr::str_detect(type,
+                                     "TF not studied"),
+        col = type
+      ),
+      width = 0.71,
+      show.legend = TRUE
+    ) +
+    ggraph::geom_node_point(
+      aes(
+        shape = regulator,
+        size = gene_type,
+        fill = gene_type
+      ),
+      stroke = 0.235,
+      color = "black",
+      show.legend = F,
+      
+    ) + ggraph::theme_graph() +
+    scale_shape_manual(values = c(21, 22), guide = "none") +
+    scale_size_manual(values = c(2, 3, 1.5) * 0.95,
+                      guide = "none") +
+    ggraph::scale_edge_color_manual(name = "Nature of the \nsupporting knwon\ninteraction",
+                                    values = colors) +
+    labs(
+      title = "Network edges colored according to their experimental support",
+      subtitle = paste(
+        round(results$tpr * 100, 2),
+        "% of the edges (with validation information available) are supported"
+      )
+    ) +
+    ggraph::scale_edge_alpha_manual(values = c(0.51, 1),
+                                    guide = "none")
+  if ("Grouped regulators" %in% layout$gene_type)
+    val <- val + scale_fill_manual(values = c("#68C872",
+                                              "darkgreen", "grey"),
+                                   guide = "none")
+  else
+    val <- val + scale_fill_manual(values = c("#68C872",
+                                              "grey"), guide = "none")
+  
+  return(val)
+}
+draw_evaluated_network(results)
+```
+
