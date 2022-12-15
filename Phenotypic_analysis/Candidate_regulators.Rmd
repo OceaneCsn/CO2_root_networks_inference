@@ -134,7 +134,7 @@ biomass_myb <- data %>%
         axis.ticks.x = element_blank(),
         axis.text.x = element_blank(),
         strip.text = element_text(size = 10, angle = -60)) +
-  scale_color_brewer(palette = "Set2")
+  scale_color_brewer(palette = "Set2") + ylim(0,30)
 
 
 N_myb <- dataN %>% 
@@ -172,7 +172,7 @@ biomass_edf3 <- data_EDF3 %>%
         axis.text.x = element_blank(),
         axis.ticks.x = element_blank(),
         strip.text = element_text(size = 10, angle = -60)) +
-  scale_color_brewer(palette = "Set2")
+  scale_color_brewer(palette = "Set2") + ylim(0,43)
 
 N_edf3 <- data_EDF3_N %>% 
   ggplot( aes(x = CO2, y = N)) + 
