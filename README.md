@@ -1,7 +1,7 @@
-# Code and data for "A gene regulatory network reveals features and regulators of the root response to elevated CO2 in Arabidopsis", O. Cassan et al., 202X.
+# Code and data for "A gene regulatory network reveals features and regulators of the root response to elevated CO2 in Arabidopsis", O. Cassan et al., 2023.
 
 
-This repository contains data and Rmarkdown scripts to reproduce the figures and analyses from "A gene regulatory network reveals features and regulators of the root response to elevated CO2 in Arabidopsis", O. Cassan et al., 202X.
+This repository contains data and Rmarkdown scripts to reproduce the figures and analyses from "A gene regulatory network reveals features and regulators of the root response to elevated CO2 in Arabidopsis", O. Cassan et al., 2023, published in the New Pyhtologist : https://doi.org/10.1111/nph.18788.
 
 
 ## Data
